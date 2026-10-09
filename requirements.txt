@@ -1,0 +1,7 @@
+numpy
+pandas
+scikit-learn
+requests
+joblib
+anthropic
+pytest

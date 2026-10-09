@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SolarCast DE</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --forecast: #2a78d6; --measured: #eb6834; --price: #1baf7a; --good: #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+      --forecast: #3987e5; --measured: #d95926; --price: #199e70; --good: #0ca30c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 28px 20px 56px; }
+  header h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--ink-2); max-width: 70ch; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .meta.live::before, .meta.stale::before { content: ""; display: inline-block; width: 8px; height: 8px;
+         border-radius: 50%; margin-right: 6px; background: var(--good); }
+  .meta.stale::before { background: var(--measured); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .grid { display: grid; gap: 14px; }
+  .tiles { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 22px 0 14px; }
+  #outcome { margin-top: 0; }
+  .tile .label { color: var(--ink-2); font-size: 12.5px; }
+  .tile .value { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; margin-top: 2px; }
+  .tile .value small { font-size: 15px; font-weight: 500; color: var(--ink-2); }
+  .tile .sub { color: var(--muted); font-size: 12.5px; }
+  h2 { font-size: 15px; margin: 0; }
+  .card > .hint { color: var(--ink-2); font-size: 12.5px; margin: 2px 0 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 4px; }
+  .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+  .legend i.band { height: 10px; border: 0; background: var(--forecast); opacity: .22; border-radius: 2px; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; overflow: visible; }
+  .chart text { font: 11.5px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .chart text.series-label { fill: var(--ink-2); font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+         border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 4px 16px rgba(0,0,0,.14);
+         white-space: nowrap; z-index: 2; }
+  .tip b { display: block; margin-bottom: 3px; }
+  .tip .row { display: flex; justify-content: space-between; gap: 16px; color: var(--ink-2); }
+  .tip .row span:last-child { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .days { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .day h3 { margin: 0 0 6px; font-size: 14px; }
+  .day dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+  .day dt { color: var(--ink-2); } .day dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .two { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--ink-2); font-weight: 500; }
+  tr.ours td { font-weight: 600; }
+  details { margin-top: 14px; } summary { cursor: pointer; color: var(--ink-2); }
+  .scroll { max-height: 340px; overflow: auto; margin-top: 10px; }
+  section { margin-top: 14px; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 22px; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>SolarCast DE</h1>
+    <p>Day-ahead forecast of Germany's solar power generation, learned from numerical weather forecasts
+       and four years of measured feed-in. Uncertainty is shown as a P10&ndash;P90 band.</p>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <div class="grid tiles" id="tiles"></div>
+  <div class="grid tiles" id="outcome"></div>
+
+  <section class="card">
+    <h2>Solar generation, Germany (GW)</h2>
+    <p class="hint">Forecast median with P10&ndash;P90 band, against measured feed-in where already published. Times in German local time.</p>
+    <div class="legend">
+      <span><i style="border-color:var(--forecast)"></i>Forecast (P50)</span>
+      <span><i class="band"></i>P10&ndash;P90 band</span>
+      <span><i style="border-color:var(--measured)"></i>Measured</span>
+    </div>
+    <div class="chart" id="solar"></div>
+  </section>
+
+  <section class="card">
+    <h2>Day-ahead electricity price, DE-LU (EUR/MWh)</h2>
+    <p class="hint">Published daily around 13:00 for the following day. Prices typically dip when solar generation peaks.</p>
+    <div class="chart" id="price"></div>
+  </section>
+
+  <section class="grid days" id="days"></section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>Forecast error by month (MAE, GW)</h2>
+      <p class="hint" id="evalhint"></p>
+      <div class="chart" id="monthly"></div>
+    </div>
+    <div class="card">
+      <h2>Model against baselines</h2>
+      <p class="hint">Same held-out period, all hours. Lower is better.</p>
+      <table id="baselines"></table>
+    </div>
+  </section>
+
+  <details class="card">
+    <summary>Hourly forecast as a table</summary>
+    <div class="scroll"><table id="hourly"></table></div>
+  </details>
+
+  <footer>
+    Data: <a href="https://energy-charts.info">energy-charts.info</a> (Fraunhofer ISE, CC BY 4.0) for generation, capacity and prices;
+    <a href="https://open-meteo.com">Open-Meteo</a> (CC BY 4.0) for weather forecasts. Independent portfolio project, not an SMA product.
+  </footer>
+</main>
+
+<script>
+let DATA, F, M, times;
+function load(d) { DATA = d; F = d.forecast; M = d.metrics; times = F.time_utc.map(t => new Date(t)); }
+load(/*__DATA__*/null);
+const NS = "http://www.w3.org/2000/svg";
+const tz = F.timezone;
+const fmtDay = new Intl.DateTimeFormat("en-GB", {timeZone: tz, weekday: "short", day: "numeric", month: "short"});
+const fmtTime = new Intl.DateTimeFormat("en-GB", {timeZone: tz, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"});
+const localHour = d => +new Intl.DateTimeFormat("en-GB", {timeZone: tz, hour: "2-digit", hourCycle: "h23"}).format(d);
+const num = (v, d = 1) => v == null ? "–" : v.toLocaleString("en-GB", {minimumFractionDigits: d, maximumFractionDigits: d});
+const el = (tag, attrs = {}, parent) => {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+};
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function niceTicks(lo, hi, n = 5) {
+  const raw = (hi - lo) / n, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].find(s => s * mag >= raw) * mag;
+  const ticks = [];
+  for (let v = Math.floor(lo / step) * step; v <= hi + step * 0.999; v += step) ticks.push(+v.toFixed(6));
+  return ticks;
+}
+
+function tooltip(host) {
+  const tip = document.createElement("div");
+  tip.className = "tip"; tip.hidden = true; host.appendChild(tip);
+  return {
+    show(html, x, y) {
+      tip.innerHTML = html; tip.hidden = false;
+      const w = tip.offsetWidth, W = host.clientWidth;
+      tip.style.left = (x + 14 + w > W ? x - w - 14 : x + 14) + "px";
+      tip.style.top = Math.max(0, y - 10) + "px";
+    },
+    hide() { tip.hidden = true; }
+  };
+}
+
+// Time-series line chart with optional band, "now" marker, crosshair and tooltip.
+function lineChart(host, {series, band, digits = 1, unit = "", step = false}) {
+  host.innerHTML = "";
+  const W = host.clientWidth, H = 250, m = {t: 14, r: 16, b: 26, l: 40};
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, height: H, role: "img"}, host);
+  const all = series.flatMap(s => s.values).concat(band ? band.hi.concat(band.lo) : []).filter(v => v != null);
+  const ticks = niceTicks(Math.min(0, ...all), Math.max(...all, 1));
+  const y0 = ticks[0], y1 = ticks[ticks.length - 1];
+  const x = i => m.l + (W - m.l - m.r) * i / (times.length - 1);
+  const y = v => H - m.b - (H - m.t - m.b) * (v - y0) / (y1 - y0);
+
+  ticks.forEach(t => {
+    el("line", {x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: css(t === 0 ? "--axis" : "--grid"), "stroke-width": 1}, svg);
+    el("text", {x: m.l - 8, y: y(t) + 4, "text-anchor": "end"}, svg).textContent = t;
+  });
+  times.forEach((d, i) => {
+    const h = localHour(d);
+    if (h === 0 && i > 0) el("line", {x1: x(i), x2: x(i), y1: m.t, y2: H - m.b, stroke: css("--grid"), "stroke-width": 1}, svg);
+    if (h === 12 && x(i) > m.l + 30 && x(i) < W - m.r - 30)
+      el("text", {x: x(i), y: H - 8, "text-anchor": "middle"}, svg).textContent = fmtDay.format(d);
+  });
+
+  const path = (vals, close) => {
+    let d = "", pen = false;
+    vals.forEach((v, i) => {
+      if (v == null) { pen = false; return; }
+      if (step && pen) d += `H${x(i).toFixed(1)}`;
+      d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+      pen = true;
+    });
+    return d;
+  };
+  if (band) {
+    const up = band.hi.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+    const down = band.lo.map((v, i) => `L${x(i).toFixed(1)},${y(v).toFixed(1)}`).reverse().join("");
+    el("path", {d: up + down + "Z", fill: css(band.color), opacity: 0.2}, svg);
+  }
+  const nowIdx = times.findIndex(d => d >= new Date(F.now_utc));
+  if (nowIdx > 0) {
+    el("line", {x1: x(nowIdx), x2: x(nowIdx), y1: m.t, y2: H - m.b, stroke: css("--muted"), "stroke-width": 1, "stroke-dasharray": "3 3"}, svg);
+    el("text", {x: x(nowIdx) + 5, y: m.t + 8}, svg).textContent = "now";
+  }
+  series.forEach(s => {
+    el("path", {d: path(s.values), fill: "none", stroke: css(s.color), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"}, svg);
+    if (series.length > 1) {  // direct label at each line's highest point
+      let best = -1;
+      s.values.forEach((v, i) => { if (v != null && x(i) > m.l + 40 && x(i) < W - m.r - 60 && (best < 0 || v > s.values[best])) best = i; });
+      if (best >= 0 && s.labelDy)
+        el("text", {x: x(best), y: y(s.values[best]) + s.labelDy, "text-anchor": "middle", class: "series-label"}, svg).textContent = s.label;
+    }
+  });
+
+  const cross = el("line", {y1: m.t, y2: H - m.b, stroke: css("--axis"), "stroke-width": 1, visibility: "hidden"}, svg);
+  const dots = series.map(s => el("circle", {r: 4, fill: css(s.color), stroke: css("--surface"), "stroke-width": 2, visibility: "hidden"}, svg));
+  const tip = tooltip(host);
+  const hit = el("rect", {x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent"}, svg);
+  hit.addEventListener("pointermove", e => {
+    const box = svg.getBoundingClientRect();
+    const px = (e.clientX - box.left) * W / box.width;
+    const i = Math.max(0, Math.min(times.length - 1, Math.round((px - m.l) / (W - m.l - m.r) * (times.length - 1))));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+    let rows = "";
+    series.forEach((s, k) => {
+      const v = s.values[i];
+      dots[k].setAttribute("visibility", v == null ? "hidden" : "visible");
+      if (v == null) return;
+      dots[k].setAttribute("cx", x(i)); dots[k].setAttribute("cy", y(v));
+      rows += `<div class="row"><span><i style="background:${css(s.color)}"></i>${s.label}</span><span>${num(v, digits)} ${unit}</span></div>`;
+      if (band && k === 0) rows += `<div class="row"><span>P10–P90</span><span>${num(band.lo[i], digits)} – ${num(band.hi[i], digits)} ${unit}</span></div>`;
+    });
+    tip.show(`<b>${fmtTime.format(times[i])}</b>${rows || '<div class="row"><span>not published yet</span></div>'}`, x(i) * box.width / W, e.clientY - box.top);
+  });
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); tip.hide(); });
+}
+
+function barChart(host, labels, values, unit) {
+  host.innerHTML = "";
+  const W = host.clientWidth, H = 220, m = {t: 18, r: 8, b: 26, l: 34};
+  const svg = el("svg", {viewBox: `0 0 ${W} ${H}`, height: H, role: "img"}, host);
+  const ticks = niceTicks(0, Math.max(...values), 4), y1 = ticks[ticks.length - 1];
+  const slot = (W - m.l - m.r) / values.length, bw = Math.min(28, slot - 2);
+  const y = v => H - m.b - (H - m.t - m.b) * v / y1;
+  ticks.forEach(t => {
+    el("line", {x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: css(t === 0 ? "--axis" : "--grid"), "stroke-width": 1}, svg);
+    el("text", {x: m.l - 6, y: y(t) + 4, "text-anchor": "end"}, svg).textContent = t;
+  });
+  const tip = tooltip(host);
+  values.forEach((v, i) => {
+    const cx = m.l + slot * (i + 0.5), top = y(v), r = Math.min(4, bw / 2, (H - m.b - top));
+    const d = `M${cx - bw / 2},${H - m.b}V${top + r}Q${cx - bw / 2},${top} ${cx - bw / 2 + r},${top}H${cx + bw / 2 - r}Q${cx + bw / 2},${top} ${cx + bw / 2},${top + r}V${H - m.b}Z`;
+    const bar = el("path", {d, fill: css("--forecast")}, svg);
+    el("text", {x: cx, y: H - 8, "text-anchor": "middle"}, svg).textContent = labels[i].short;
+    const hit = el("rect", {x: cx - slot / 2, y: m.t, width: slot, height: H - m.t - m.b, fill: "transparent"}, svg);
+    hit.addEventListener("pointermove", e => {
+      bar.setAttribute("opacity", 0.75);
+      const box = svg.getBoundingClientRect();
+      tip.show(`<b>${labels[i].long}</b><div class="row"><span>MAE</span><span>${num(v, 2)} ${unit}</span></div>`, e.clientX - box.left, e.clientY - box.top);
+    });
+    hit.addEventListener("pointerleave", () => { bar.removeAttribute("opacity"); tip.hide(); });
+  });
+}
+
+function render() {
+  lineChart(document.getElementById("solar"), {
+    series: [{label: "Forecast", color: "--forecast", values: F.p50},
+             {label: "Measured", color: "--measured", values: F.actual}],
+    band: {lo: F.p10, hi: F.p90, color: "--forecast"}, unit: "GW",
+  });
+  lineChart(document.getElementById("price"), {
+    series: [{label: "Day-ahead price", color: "--price", values: F.price}], unit: "EUR/MWh", step: true,
+  });
+  const months = Object.keys(M.monthly_mae_gw);
+  barChart(document.getElementById("monthly"),
+    months.map(k => { const d = new Date(k + "-15"); return {
+      short: d.toLocaleString("en-GB", {month: "short"}), long: d.toLocaleString("en-GB", {month: "long", year: "numeric"})}; }),
+    months.map(k => M.monthly_mae_gw[k]), "GW");
+}
+
+// --- text content -------------------------------------------------------------
+function renderMeta() {
+  const live = DATA.live, meta = document.getElementById("meta");
+  let status = "";
+  if (live) {
+    const age = (Date.now() - new Date(F.generated_utc)) / 60000;
+    const problem = live.error ? `Live update failed (${live.error})`
+      : age > live.max_age_minutes ? `No update for ${Math.round(age)} min` : null;
+    status = (problem ? problem + ", showing the last data" : "Live") + " · ";
+    meta.className = "meta " + (problem ? "stale" : "live");
+  }
+  meta.textContent = status + `Updated ${F.generated_at} · installed solar capacity ${num(F.capacity_gw)} GW`;
+}
+
+// Measured outcome against the forecast, for the latest day with measured daylight hours.
+function renderOutcome() {
+  const O = F.outcome, L = F.latest_reading, tiles = [];
+  if (L) tiles.push(["Latest measured reading", `${num(L.gw)} <small>GW</small>`,
+    `15-minute value from ${fmtTime.format(new Date(L.time_utc))}; published 1–2 h late`]);
+  if (O) {
+    const h = O.last_hour, day = O.date === F.generated_at.slice(0, 10) ? "today" : fmtDay.format(new Date(O.date + "T12:00:00Z"));
+    const where = h.actual_gw < h.p10 ? "below" : h.actual_gw > h.p90 ? "above" : "inside";
+    tiles.push(
+      [`Last measured hour, ${h.start}–${h.end}`, `${num(h.actual_gw)} <small>GW</small>`,
+       `forecast ${num(h.p50)} GW, ${where} the P10–P90 band (${num(h.p10)} – ${num(h.p90)})`],
+      [`Forecast error ${day} so far (MAE)`, `${num(O.mae_gw, 2)} <small>GW</small>`,
+       `${O.hours} daylight hours, forecast ${O.bias_gw >= 0 ? "over" : "under"} by ${num(Math.abs(O.bias_gw), 2)} GW on average`],
+      ["Hours inside the P10–P90 band", `${O.hours_in_band} <small>of ${O.hours}</small>`,
+       `measured ${num(O.energy_gwh.actual, 0)} GWh, forecast ${num(O.energy_gwh.p50, 0)} GWh over those hours`]);
+  }
+  document.getElementById("outcome").innerHTML = tiles.map(([l, v, s]) =>
+    `<div class="card tile"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${s}</div></div>`).join("");
+}
+
+function renderText() {
+renderMeta();
+renderOutcome();
+
+const next =F.days.find(d => d.date > F.now_utc.slice(0, 10)) || F.days[F.days.length - 1];
+const tiles = [
+  ["Expected solar energy, " + fmtDay.format(new Date(next.date + "T12:00:00Z")),
+   `${num(next.energy_gwh.p50, 0)} <small>GWh</small>`, `P10–P90: ${num(next.energy_gwh.p10, 0)} – ${num(next.energy_gwh.p90, 0)} GWh`],
+  ["Peak generation", `${num(next.peak_gw)} <small>GW</small>`, `around ${next.peak_time}, ${next.mean_cloud_cover_pct}% mean cloud cover`],
+  ["Forecast error (MAE)", `${num(M.model.mae_gw, 2)} <small>GW</small>`, `${num(M.model.nmae_pct_of_capacity, 2)}% of installed capacity, held-out year`],
+  ["Better than persistence", `${num(M.skill_vs_persistence_pct, 0)} <small>%</small>`, `lower MAE than "same as yesterday"`],
+];
+document.getElementById("tiles").innerHTML = tiles.map(([l, v, s]) =>
+  `<div class="card tile"><div class="label">${l}</div><div class="value">${v}</div><div class="sub">${s}</div></div>`).join("");
+
+document.getElementById("days").innerHTML = F.days.map(d => `
+  <div class="card day"><h3>${fmtDay.format(new Date(d.date + "T12:00:00Z"))}</h3><dl>
+    <dt>Solar energy</dt><dd>${num(d.energy_gwh.p50, 0)} GWh</dd>
+    <dt>Range (P10–P90)</dt><dd>${num(d.energy_gwh.p10, 0)} – ${num(d.energy_gwh.p90, 0)} GWh</dd>
+    <dt>Peak</dt><dd>${num(d.peak_gw)} GW at ${d.peak_time}</dd>
+    <dt>Sunniest 3 h from</dt><dd>${d.sunniest_3h ? d.sunniest_3h.start : "–"}</dd>
+    <dt>Cheapest 3 h from</dt><dd>${d.cheapest_3h ? `${d.cheapest_3h.start} (${num(d.cheapest_3h.mean_price_eur_mwh)} EUR/MWh)` : "prices not published yet"}</dd>
+  </dl></div>`).join("");
+
+document.getElementById("evalhint").textContent =
+  `Held-out period ${M.test_period[0]} to ${M.test_period[1]}, never seen in training. ` +
+  `P10–P90 band contained ${num(M.p10_p90_coverage_pct_daytime, 0)}% of daytime hours (target 80%).`;
+
+const rows = [["Gradient boosting (this model)", M.model, true], ["Linear on mean irradiance", M.baseline_linear_ghi],
+              ["Persistence (same hour yesterday)", M.baseline_persistence]];
+document.getElementById("baselines").innerHTML =
+  "<tr><th>Method</th><th>MAE (GW)</th><th>RMSE (GW)</th><th>Bias (GW)</th></tr>" + rows.map(([n, s, ours]) =>
+  `<tr${ours ? ' class="ours"' : ""}><td>${n}</td><td>${num(s.mae_gw, 2)}</td><td>${num(s.rmse_gw, 2)}</td><td>${num(s.bias_gw, 2)}</td></tr>`).join("");
+
+document.getElementById("hourly").innerHTML =
+  "<tr><th>Local time</th><th>P10 (GW)</th><th>P50 (GW)</th><th>P90 (GW)</th><th>Measured (GW)</th><th>Price (EUR/MWh)</th><th>Cloud (%)</th></tr>" +
+  times.map((t, i) => `<tr><td>${fmtTime.format(t)}</td><td>${num(F.p10[i], 2)}</td><td>${num(F.p50[i], 2)}</td><td>${num(F.p90[i], 2)}</td><td>${num(F.actual[i], 2)}</td><td>${num(F.price[i])}</td><td>${num(F.cloud[i], 0)}</td></tr>`).join("");
+}
+
+renderText();
+render();
+
+// Live server or hosted site: pick up new data without reloading the page.
+if (DATA.live) setInterval(async () => {
+  try {
+    const r = await fetch(`${DATA.live.url}?t=${Date.now()}`, {cache: "no-store"});
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    if (d.forecast.generated_utc !== F.generated_utc) { load(d); renderText(); render(); return; }
+    DATA.live = d.live;
+  } catch {
+    DATA.live.error = "data not reachable";
+  }
+  renderMeta();
+}, DATA.live.poll_seconds * 1000);
+
+let timer;
+addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(render, 120); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+</script>
+</body>
+</html>
