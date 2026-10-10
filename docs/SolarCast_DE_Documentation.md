@@ -8,7 +8,7 @@ SolarCast DE forecasts Germany's solar power generation one day ahead from weath
 
 SolarCast DE predicts the hourly solar feed-in of all of Germany for the next three days, in GW, with a P10–P90 uncertainty band. It turns that forecast into practical advice (the sunniest and cheapest hours for flexible loads) and exposes it through a dashboard and an AI assistant.
 
-It is an independent portfolio project built around the themes of SMA Solar Technology's AI roles in Kassel: renewable energy, weather-driven forecasting and agent-style AI applications. It is not an SMA product and uses no SMA data.
+It is an independent portfolio project on renewable energy, weather-driven forecasting and agent-style AI applications. It uses only public data.
 
 | Item | Detail |
 | --- | --- |
