@@ -6,7 +6,7 @@ DATA_DIR = ROOT / "data"
 MODEL_DIR = ROOT / "models"
 OUTPUT_DIR = ROOT / "output"
 
-# Weather sampling points. Kassel first (SMA headquarters), the rest spread over
+# Weather sampling points. Kassel first, the rest spread over
 # the regions that hold most of Germany's installed PV capacity.
 LOCATIONS = {
     "kassel": (51.31, 9.48),

@@ -4,9 +4,8 @@ Day-ahead forecasting of Germany's solar power generation from numerical weather
 forecasts, with an uncertainty band, a decision layer for flexible loads, and an
 LLM assistant that answers questions by calling tools over the forecast.
 
-Built as an independent portfolio project around the themes of SMA Solar Technology's
-AI roles in Kassel: renewable energy, weather-driven forecasting, and agent-style AI
-applications. It is not an SMA product and uses no SMA data.
+Built as an independent portfolio project on renewable energy, weather-driven
+forecasting, and agent-style AI applications. It uses only public data.
 
 ## What it does
 
